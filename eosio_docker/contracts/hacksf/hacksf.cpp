@@ -25,12 +25,25 @@ private:
       return hack == hacks.end();
     }
 
+      /// @abi action 
+    void get(const account_name _user) {
+        hacktable obj(_self, _self);
+        auto notes = obj.get_index<N(getbyuser)>();
+        auto iterator = notes.find(_user);
+        eosio_assert(iterator != notes.end(), "Account not found");
+        auto currentData = notes.get(_user);
+    print("Key: ", currentData.prim_key);
+    }
 
     /// @abi table
     struct hackstruct {
+      // CANNOT CHANGE STRUCT ONCE CONTRACT IS DEPLOYED
       uint64_t      prim_key;  // primary key
       account_name  user;      // account name for the user
-      std::string   hashdata;      // the hashed data
+      std::string   party;      // username
+      std::string   dob;
+      std::string   gender;
+      uint64_t      height; //in cm
       uint64_t      timestamp; // the store the last update block time
 
       // primary key
@@ -44,16 +57,29 @@ private:
       indexed_by< N(getbyuser), const_mem_fun<hackstruct, account_name, &hackstruct::get_by_user> >
       > hacktable;
 
+      /// @abi table
+    struct appstruct {
+      uint64_t      prim_key;  // primary key
+      account_name  user;      // account name for the user
+      std::string   app_name;      // app name
+      uint64_t      app_id;
+      std::string   url;
+      std::string   permissions; //permissions required by app in string
+      uint64_t      timestamp; // the store the last update block time
+
+      // primary key
+      auto primary_key() const { return prim_key; }
+      // secondary key: user
+      account_name get_by_user() const { return user; }
+    };
+
+    // create a multi-index table and support secondary key
+    typedef eosio::multi_index< N(appstruct), appstruct,
+      indexed_by< N(getbyuser), const_mem_fun<appstruct, account_name, &appstruct::get_by_user> >
+      > apptable;
+
      
-/// @abi action 
-    void get(const account_name _user) {
-        hacktable obj(_self, _self);
-        auto notes = obj.get_index<N(getbyuser)>();
-        auto iterator = notes.find(_user);
-        eosio_assert(iterator != notes.end(), "Account not found");
-        auto currentData = notes.get(_user);
-    print("Key: ", currentData.prim_key);
-    }
+
     /// @abi action
     /*void send_receipt(account_name buyer, std::string message){
       action(
@@ -67,13 +93,37 @@ private:
   public:
     using contract::contract;
 
-     
+     /// @abi action
 
-    /// @abi action
-    void add(const account_name _user, std::string& _hashdata) {
+     void addapp(const account_name _user,  std::string _appname, uint64_t _appid, std::string _url, std::string _permissions) {
         
         //usernames are actually numbers under the account name
-        //require_auth(_user);
+        require_auth(_user);
+       apptable obj(_self, _self);
+        auto notes = obj.get_index<N(getbyuser)>();
+        auto iterator = notes.find(_user);
+        //eosio_assert(iterator != notes.end(), "User not found");
+        
+        
+
+ obj.emplace( _self, [&]( auto& address ) {
+          address.prim_key    = obj.available_primary_key();
+          address.user        = _user;
+          address.app_name        = _appname;
+          address.app_id        = _appid;
+          address.url        = _url;
+          address.permissions        = _permissions;
+          address.timestamp   = now();
+        });
+
+       
+    }
+
+    /// @abi action
+    void add(const account_name _user,  std::string enc_photohash) {
+        
+        //usernames are actually numbers under the account name
+        require_auth(_user);
        hacktable obj(_self, _self);
         auto notes = obj.get_index<N(getbyuser)>();
         auto iterator = notes.find(_user);
@@ -84,12 +134,14 @@ private:
  obj.emplace( _self, [&]( auto& address ) {
           address.prim_key    = obj.available_primary_key();
           address.user        = _user;
-          address.hashdata        = _hashdata;
+          address.party        = enc_photohash;
           address.timestamp   = now();
         });
 
        
-    }
+      }
+      
+
 
     /// @abi action
 
@@ -118,26 +170,13 @@ private:
 */
 
     /// @abi action
-    void buydata(account_name _buyer, account_name _seller, uint64_t price) 
+    void buydata(account_name _buyer, account_name _seller, std::string _hash, uint64_t price) 
     {
-        hacktable obj(_self, _self);
-        auto notes = obj.get_index<N(getbyuser)>();
-        /*auto iterator_buyer = notes.find(_buyer);
-        eosio_assert(iterator_buyer != notes.end(), "Buyer not found");*/
-        auto currentData = notes.get(_seller);
-        //print("Key: ", currentData.prim_key);
        
-       
-            auto iterator_seller = notes.find(_seller);
-            eosio_assert(iterator_seller != notes.end(), "Seller not found");
-                asset dataPrice = asset(price, string_to_symbol(4, "EOS"));
-                print("Price: ", dataPrice);
-                action(permission_level{_buyer,N(active)}, N(eosio), N(transfer), make_tuple(_buyer, _seller, dataPrice, std::string(""))).send();
-           
     }
     
 
 };
 
 // specify the contract name, and export a public action: update
-EOSIO_ABI( hacksf, (add) (buydata))
+EOSIO_ABI( hacksf, (addapp) (add) (buydata))
